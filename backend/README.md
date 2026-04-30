@@ -11,13 +11,33 @@ backend/
 └── main.py                 # FastAPI composition root
 ```
 
-Chạy local:
+## Chạy local
+
+Chạy các lệnh từ root repo:
 
 ```bash
-python -m venv .venv
+cp backend/.env.example backend/.env
+```
+
+Điền Google OAuth credentials trong `backend/.env` nếu cần login Google thật.
+
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r backend/requirements.txt
-uvicorn backend.main:app --reload
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Mở:
+
+```text
+http://localhost:8000/docs
+```
+
+Google OAuth login:
+
+```text
+http://localhost:8000/auth/google/login
 ```
 
 ## Chạy bằng Docker
@@ -25,8 +45,8 @@ uvicorn backend.main:app --reload
 Chạy các lệnh từ root repo:
 
 ```bash
-docker build -t mochi-finance-api -f backend/Dockerfile .
-docker run --rm -p 8000:8000 --name mochi-finance-api mochi-finance-api
+docker build -t trietdang5599/mochi-finance-api:latest -f backend/Dockerfile .
+docker run --rm --env-file backend/.env -p 8000:8000 --name mochi-finance-api trietdang5599/mochi-finance-api:latest
 ```
 
 Mở API docs:
@@ -58,21 +78,27 @@ curl -X POST http://localhost:8000/transactions \
 Nếu muốn đổi port local:
 
 ```bash
-docker run --rm -p 8080:8000 --name mochi-finance-api mochi-finance-api
+docker run --rm --env-file backend/.env -p 8080:8000 --name mochi-finance-api trietdang5599/mochi-finance-api:latest
 ```
 
 Khi đó mở `http://localhost:8080/docs`.
 
 ## Deploy lên Render
 
-Repo đã có `render.yaml` để deploy bằng Render Blueprint.
+Repo đã có `render.yaml` để deploy bằng Docker Hub image:
 
-1. Push code lên GitHub.
-2. Vào Render Dashboard.
-3. Chọn **New +** -> **Blueprint**.
-4. Connect repository này.
-5. Render sẽ đọc `render.yaml` và tạo web service `mochi-personal-finance-api`.
-6. Sau khi deploy xong, mở:
+```text
+docker.io/trietdang5599/mochi-finance-api:latest
+```
+
+1. Build image.
+2. Push lên Docker Hub.
+3. Vào Render Dashboard.
+4. Chọn **New +** -> **Blueprint**.
+5. Connect repository này.
+6. Render sẽ đọc `render.yaml` và tạo web service `mochi-personal-finance-api`.
+7. Cấu hình environment variables trên Render theo `backend/.env.example`.
+8. Sau khi deploy xong, mở:
 
 ```text
 https://<render-service-url>/docs
@@ -81,11 +107,10 @@ https://<render-service-url>/docs
 Nếu tạo thủ công thay vì Blueprint:
 
 1. Chọn **New +** -> **Web Service**.
-2. Connect repository.
-3. Runtime: **Docker**.
-4. Dockerfile Path: `./backend/Dockerfile`.
-5. Docker Build Context Directory: `.`.
-6. Health Check Path: `/docs`.
-7. Deploy.
+2. Chọn **Deploy an existing image**.
+3. Image URL: `docker.io/trietdang5599/mochi-finance-api:latest`.
+4. Health Check Path: `/docs`.
+5. Cấu hình environment variables theo `backend/.env.example`.
+6. Deploy.
 
 Render cấp biến môi trường `PORT`; Dockerfile hiện chạy Uvicorn với `${PORT:-8000}` và bind `0.0.0.0`, nên chạy được cả local lẫn Render.

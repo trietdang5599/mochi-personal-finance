@@ -1,6 +1,69 @@
 # mochi-personal-finance
 Backend for Personal Finance
 
+## Run Backend
+
+Chạy các lệnh từ root repo.
+
+### 1. Tạo file môi trường
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Cập nhật `backend/.env` nếu dùng Google OAuth thật:
+
+```env
+GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
+FRONTEND_URL=http://localhost:5173
+CORS_ORIGINS=http://localhost:5173
+```
+
+### 2. Chạy bằng Python local
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Nếu máy dùng lệnh `python` thay vì `python3`:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Mở API docs:
+
+```text
+http://localhost:8000/docs
+```
+
+Test nhanh:
+
+```bash
+curl http://localhost:8000/transactions
+```
+
+Google OAuth login:
+
+```text
+http://localhost:8000/auth/google/login
+```
+
+### 3. Chạy bằng Docker
+
+```bash
+docker build -t trietdang5599/mochi-finance-api:latest -f backend/Dockerfile .
+docker run --rm --env-file backend/.env -p 8000:8000 trietdang5599/mochi-finance-api:latest
+```
+
 ## Deploy Docker Hub
 
 Docker Hub repository:
