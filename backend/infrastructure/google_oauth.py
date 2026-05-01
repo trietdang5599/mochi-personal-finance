@@ -84,6 +84,7 @@ class GoogleOAuthService:
     revoke_url = "https://oauth2.googleapis.com/revoke"
     drive_files_url = "https://www.googleapis.com/drive/v3/files"
     drive_readonly_scope = "https://www.googleapis.com/auth/drive.readonly"
+    spreadsheets_scope = "https://www.googleapis.com/auth/spreadsheets"
     google_sheets_mime_type = "application/vnd.google-apps.spreadsheet"
     excel_mime_types = (
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -104,7 +105,7 @@ class GoogleOAuthService:
             "client_id": self.config.client_id,
             "redirect_uri": self.config.redirect_uri,
             "response_type": "code",
-            "scope": f"openid email profile {self.drive_readonly_scope}",
+            "scope": f"openid email profile {self.drive_readonly_scope} {self.spreadsheets_scope}",
             "access_type": "offline",
             "prompt": "consent",
             "state": state,

@@ -61,7 +61,7 @@ Google OAuth login:
 http://localhost:8000/auth/google/login
 ```
 
-Sau khi Google OAuth thành công, backend sẽ xin thêm quyền Google Drive readonly và tự tải file Excel đã cấu hình bằng `GOOGLE_DRIVE_FILE_ID` hoặc `GOOGLE_DRIVE_FILE_NAME`. File được lưu mặc định ở:
+Sau khi Google OAuth thành công, backend sẽ xin thêm quyền Google Drive readonly và Google Sheets write để tự tải file Excel/Google Sheet đã cấu hình bằng `GOOGLE_DRIVE_FILE_ID` hoặc `GOOGLE_DRIVE_FILE_NAME`, đồng thời FE có thể dùng token để overwrite nội dung Google Sheet. File được lưu mặc định ở:
 
 ```text
 backend/storage/google_drive
@@ -197,6 +197,15 @@ Trong Google Cloud Console, OAuth Client cũng phải có Authorized redirect UR
 ```text
 https://<render-service-url>/auth/google/callback
 ```
+
+OAuth consent screen cần có các scope:
+
+```text
+https://www.googleapis.com/auth/drive.readonly
+https://www.googleapis.com/auth/spreadsheets
+```
+
+Google Cloud project cũng cần bật Google Drive API và Google Sheets API. Sau khi thêm scope mới, người dùng phải reconnect Google để nhận access token mới có quyền `spreadsheets`; token cũ trong FE/localStorage sẽ vẫn bị Google từ chối khi overwrite Sheet.
 
 Frontend GitHub Pages phải gọi login qua backend Render, không gọi backend local:
 

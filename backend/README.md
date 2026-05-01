@@ -53,7 +53,7 @@ Google OAuth login:
 http://localhost:8000/auth/google/login
 ```
 
-Callback OAuth sẽ tự tải file Excel đã cấu hình. Có thể gọi lại thủ công bằng access token:
+Callback OAuth xin quyền Google Drive readonly và Google Sheets write. Backend sẽ tự tải file Excel/Google Sheet đã cấu hình; FE cũng có thể dùng access token mới để overwrite nội dung Google Sheet. Có thể gọi lại thủ công bằng access token:
 
 ```bash
 curl -X POST http://localhost:8000/auth/google/drive/excel \
@@ -139,6 +139,15 @@ Trong Google Cloud Console, Authorized redirect URI phải trùng chính xác:
 ```text
 https://<render-service-url>/auth/google/callback
 ```
+
+OAuth consent screen cần khai báo các scope:
+
+```text
+https://www.googleapis.com/auth/drive.readonly
+https://www.googleapis.com/auth/spreadsheets
+```
+
+Google Cloud project cần bật Google Drive API và Google Sheets API. Sau khi thêm scope `spreadsheets`, người dùng phải reconnect Google để FE nhận access token mới; token cũ sẽ vẫn bị Google từ chối khi overwrite Sheet.
 
 Frontend GitHub Pages nên mở login bằng backend Render:
 
