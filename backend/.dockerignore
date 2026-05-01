@@ -1,4 +1,10 @@
 __pycache__
+backend/.env
+backend/.env.*
+.env
+.env.*
+!.env.example
+storage
 *.pyc
 *.pyo
 *.pyd

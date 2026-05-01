@@ -1,5 +1,9 @@
 .git
 .gitignore
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/storage
 __pycache__
 *.pyc
 *.pyo

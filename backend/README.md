@@ -127,6 +127,7 @@ https://<render-service-url>/docs
 Khi frontend chạy trên GitHub Pages, các URL production phải được cấu hình như sau:
 
 ```env
+APP_ENV=production
 GOOGLE_REDIRECT_URI=https://<render-service-url>/auth/google/callback
 FRONTEND_URL=https://<github-username>.github.io/<repo-name>/
 CORS_ORIGINS=https://<github-username>.github.io
@@ -145,7 +146,7 @@ Frontend GitHub Pages nên mở login bằng backend Render:
 https://<render-service-url>/auth/google/login?return_to=https://<github-username>.github.io/<repo-name>/
 ```
 
-Nếu OAuth thành công nhưng quay về `http://localhost:5173`, Render đang thiếu `FRONTEND_URL` hoặc đang dùng image/config cũ. Sau khi sửa env hoặc push image mới, vào Render chọn **Manual Deploy** -> **Deploy latest reference**.
+Nếu OAuth thành công nhưng quay về `http://localhost:5173`, Render đang dùng image/config cũ hoặc `APP_ENV=production` chưa được deploy. Ở production, backend không đọc `backend/.env` và không fallback về localhost. Sau khi sửa env hoặc push image mới, vào Render chọn **Manual Deploy** -> **Deploy latest reference**.
 
 Nếu tạo thủ công thay vì Blueprint:
 

@@ -185,6 +185,7 @@ Sau khi push image lên Docker Hub:
 Trên Render, cấu hình các biến môi trường production:
 
 ```env
+APP_ENV=production
 GOOGLE_REDIRECT_URI=https://<render-service-url>/auth/google/callback
 FRONTEND_URL=https://<github-username>.github.io/<repo-name>/
 CORS_ORIGINS=https://<github-username>.github.io
@@ -203,7 +204,7 @@ Frontend GitHub Pages phải gọi login qua backend Render, không gọi backen
 https://<render-service-url>/auth/google/login?return_to=https://<github-username>.github.io/<repo-name>/
 ```
 
-Nếu callback OAuth quay về `http://localhost:5173`, nguyên nhân là `FRONTEND_URL` trên Render đang thiếu hoặc vẫn để local. Nếu Google báo `redirect_uri_mismatch`, nguyên nhân là `GOOGLE_REDIRECT_URI` trên Render không trùng Authorized redirect URI trong Google Cloud.
+Nếu callback OAuth quay về `http://localhost:5173`, nguyên nhân là image/config cũ vẫn đang chạy hoặc `APP_ENV=production` chưa được deploy. Ở production, backend không đọc `backend/.env` và không fallback về localhost. Nếu Google báo `redirect_uri_mismatch`, nguyên nhân là `GOOGLE_REDIRECT_URI` trên Render không trùng Authorized redirect URI trong Google Cloud.
 
 ### Cách 1: Tạo service trực tiếp từ Docker Hub image
 

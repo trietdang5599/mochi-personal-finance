@@ -10,7 +10,21 @@ import requests
 from dotenv import load_dotenv
 
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+def is_production() -> bool:
+    return os.getenv("APP_ENV") == "production"
+
+
+def env_value(name: str, default: str | None = None) -> str | None:
+    value = os.getenv(name)
+    if value:
+        return value
+    if is_production() and default is not None:
+        raise GoogleOAuthError(f"{name} is not configured")
+    return default
+
+
+if not is_production():
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
 class GoogleOAuthError(Exception):
@@ -48,10 +62,10 @@ class GoogleOAuthConfig:
     @classmethod
     def from_env(cls) -> "GoogleOAuthConfig":
         return cls(
-            client_id=os.getenv("GOOGLE_CLIENT_ID"),
-            client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-            redirect_uri=os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback"),
-            frontend_url=os.getenv("FRONTEND_URL", "http://localhost:5173"),
+            client_id=env_value("GOOGLE_CLIENT_ID"),
+            client_secret=env_value("GOOGLE_CLIENT_SECRET"),
+            redirect_uri=env_value("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback") or "",
+            frontend_url=env_value("FRONTEND_URL", "http://localhost:5173") or "",
             drive_file_id=os.getenv("GOOGLE_DRIVE_FILE_ID"),
             drive_file_name=os.getenv("GOOGLE_DRIVE_FILE_NAME"),
             drive_download_dir=Path(
