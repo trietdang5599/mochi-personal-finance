@@ -5,7 +5,12 @@ from fastapi.responses import RedirectResponse
 
 from backend.application.use_cases import CreateTransaction, CreateTransactionInput, ListTransactions
 from backend.infrastructure.google_oauth import GoogleOAuthError, GoogleOAuthService
-from backend.interface_adapters.schemas import GoogleUserResponse, TransactionCreateRequest, TransactionResponse
+from backend.interface_adapters.schemas import (
+    GoogleDriveFileResponse,
+    GoogleUserResponse,
+    TransactionCreateRequest,
+    TransactionResponse,
+)
 
 
 def transaction_router(create_transaction: CreateTransaction, list_transactions: ListTransactions) -> APIRouter:
@@ -53,6 +58,23 @@ def auth_router(google_oauth: GoogleOAuthService | None = None) -> APIRouter:
             return GoogleUserResponse.from_google_user(google_oauth.fetch_userinfo(access_token))
         except GoogleOAuthError as exc:
             raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    @router.post("/google/drive/excel", response_model=GoogleDriveFileResponse)
+    def google_drive_excel(authorization: str | None = Header(default=None)) -> GoogleDriveFileResponse:
+        access_token = bearer_token_from_header(authorization)
+        try:
+            drive_file = google_oauth.download_configured_excel(access_token)
+        except GoogleOAuthError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not drive_file:
+            raise HTTPException(status_code=400, detail="GOOGLE_DRIVE_FILE_ID or GOOGLE_DRIVE_FILE_NAME is not configured")
+        return GoogleDriveFileResponse(
+            id=drive_file.id,
+            name=drive_file.name,
+            mime_type=drive_file.mime_type,
+            download_path=drive_file.download_path,
+            size=drive_file.size,
+        )
 
     @router.post("/google/logout")
     def google_logout(authorization: str | None = Header(default=None)) -> dict[str, str]:

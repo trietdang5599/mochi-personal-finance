@@ -19,6 +19,10 @@ GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
 FRONTEND_URL=http://localhost:5173
 CORS_ORIGINS=http://localhost:5173
+# GOOGLE_DRIVE_FILE_ID=google-drive-file-id
+# Hoặc dùng tên file nếu chưa có file id:
+# GOOGLE_DRIVE_FILE_NAME=personal-finance.xlsx
+# GOOGLE_DRIVE_DOWNLOAD_DIR=backend/storage/google_drive
 ```
 
 ### 2. Chạy bằng Python local
@@ -55,6 +59,19 @@ Google OAuth login:
 
 ```text
 http://localhost:8000/auth/google/login
+```
+
+Sau khi Google OAuth thành công, backend sẽ xin thêm quyền Google Drive readonly và tự tải file Excel đã cấu hình bằng `GOOGLE_DRIVE_FILE_ID` hoặc `GOOGLE_DRIVE_FILE_NAME`. File được lưu mặc định ở:
+
+```text
+backend/storage/google_drive
+```
+
+Nếu muốn test tải lại file bằng access token sau khi login:
+
+```bash
+curl -X POST http://localhost:8000/auth/google/drive/excel \
+  -H "Authorization: Bearer <google-access-token>"
 ```
 
 ### 3. Chạy bằng Docker
@@ -146,9 +163,47 @@ services:
     image:
       url: docker.io/trietdang5599/mochi-finance-api:latest
     healthCheckPath: /docs
+    envVars:
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GOOGLE_DRIVE_FILE_ID
+        sync: false
 ```
 
 Sau khi push image lên Docker Hub:
+
+### Cấu hình OAuth khi frontend chạy trên GitHub Pages
+
+Trên Render, cấu hình các biến môi trường production:
+
+```env
+GOOGLE_REDIRECT_URI=https://<render-service-url>/auth/google/callback
+FRONTEND_URL=https://<github-username>.github.io/<repo-name>/
+CORS_ORIGINS=https://<github-username>.github.io
+GOOGLE_DRIVE_FILE_ID=<google-drive-file-id>
+```
+
+Trong Google Cloud Console, OAuth Client cũng phải có Authorized redirect URI giống hệt Render:
+
+```text
+https://<render-service-url>/auth/google/callback
+```
+
+Frontend GitHub Pages phải gọi login qua backend Render, không gọi backend local:
+
+```text
+https://<render-service-url>/auth/google/login?return_to=https://<github-username>.github.io/<repo-name>/
+```
+
+Nếu callback OAuth quay về `http://localhost:5173`, nguyên nhân là `FRONTEND_URL` trên Render đang thiếu hoặc vẫn để local. Nếu Google báo `redirect_uri_mismatch`, nguyên nhân là `GOOGLE_REDIRECT_URI` trên Render không trùng Authorized redirect URI trong Google Cloud.
 
 ### Cách 1: Tạo service trực tiếp từ Docker Hub image
 

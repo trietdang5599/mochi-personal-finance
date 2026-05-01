@@ -20,6 +20,19 @@ cp backend/.env.example backend/.env
 ```
 
 Điền Google OAuth credentials trong `backend/.env` nếu cần login Google thật.
+Để tự tải file Excel sau khi OAuth thành công, thêm một trong hai biến sau:
+
+```env
+GOOGLE_DRIVE_FILE_ID=google-drive-file-id
+# hoặc
+GOOGLE_DRIVE_FILE_NAME=personal-finance.xlsx
+```
+
+Mặc định file tải về nằm trong `backend/storage/google_drive`. Có thể đổi bằng:
+
+```env
+GOOGLE_DRIVE_DOWNLOAD_DIR=backend/storage/google_drive
+```
 
 ```bash
 python3 -m venv .venv
@@ -38,6 +51,13 @@ Google OAuth login:
 
 ```text
 http://localhost:8000/auth/google/login
+```
+
+Callback OAuth sẽ tự tải file Excel đã cấu hình. Có thể gọi lại thủ công bằng access token:
+
+```bash
+curl -X POST http://localhost:8000/auth/google/drive/excel \
+  -H "Authorization: Bearer <google-access-token>"
 ```
 
 ## Chạy bằng Docker
@@ -103,6 +123,29 @@ docker.io/trietdang5599/mochi-finance-api:latest
 ```text
 https://<render-service-url>/docs
 ```
+
+Khi frontend chạy trên GitHub Pages, các URL production phải được cấu hình như sau:
+
+```env
+GOOGLE_REDIRECT_URI=https://<render-service-url>/auth/google/callback
+FRONTEND_URL=https://<github-username>.github.io/<repo-name>/
+CORS_ORIGINS=https://<github-username>.github.io
+GOOGLE_DRIVE_FILE_ID=<google-drive-file-id>
+```
+
+Trong Google Cloud Console, Authorized redirect URI phải trùng chính xác:
+
+```text
+https://<render-service-url>/auth/google/callback
+```
+
+Frontend GitHub Pages nên mở login bằng backend Render:
+
+```text
+https://<render-service-url>/auth/google/login?return_to=https://<github-username>.github.io/<repo-name>/
+```
+
+Nếu OAuth thành công nhưng quay về `http://localhost:5173`, Render đang thiếu `FRONTEND_URL` hoặc đang dùng image/config cũ. Sau khi sửa env hoặc push image mới, vào Render chọn **Manual Deploy** -> **Deploy latest reference**.
 
 Nếu tạo thủ công thay vì Blueprint:
 

@@ -61,3 +61,11 @@ class GoogleUserResponse(BaseModel):
             sub=user.sub,
             provider=user.provider,
         )
+
+
+class GoogleDriveFileResponse(BaseModel):
+    id: str
+    name: str
+    mime_type: str
+    download_path: str
+    size: int | None = None
