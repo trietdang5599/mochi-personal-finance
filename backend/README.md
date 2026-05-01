@@ -60,6 +60,19 @@ curl -X POST http://localhost:8000/auth/google/drive/excel \
   -H "Authorization: Bearer <google-access-token>"
 ```
 
+Ghi dữ liệu lên Google Sheet qua backend:
+
+```bash
+curl -X PUT http://localhost:8000/auth/google/sheets/<spreadsheet-id>/values \
+  -H "Authorization: Bearer <google-access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "range": "Sheet1!A1",
+    "clear_range": "Sheet1!A:Z",
+    "values": [["Date", "Amount"], ["2026-05-01", 100000]]
+  }'
+```
+
 ## Chạy bằng Docker
 
 Chạy các lệnh từ root repo:
@@ -145,6 +158,7 @@ OAuth consent screen cần khai báo các scope:
 ```text
 https://www.googleapis.com/auth/drive.readonly
 https://www.googleapis.com/auth/spreadsheets
+https://www.googleapis.com/auth/drive.file
 ```
 
 Google Cloud project cần bật Google Drive API và Google Sheets API. Sau khi thêm scope `spreadsheets`, người dùng phải reconnect Google để FE nhận access token mới; token cũ sẽ vẫn bị Google từ chối khi overwrite Sheet.

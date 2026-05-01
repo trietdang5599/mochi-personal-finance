@@ -74,6 +74,19 @@ curl -X POST http://localhost:8000/auth/google/drive/excel \
   -H "Authorization: Bearer <google-access-token>"
 ```
 
+Ghi dữ liệu lên Google Sheet qua backend:
+
+```bash
+curl -X PUT http://localhost:8000/auth/google/sheets/<spreadsheet-id>/values \
+  -H "Authorization: Bearer <google-access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "range": "Sheet1!A1",
+    "clear_range": "Sheet1!A:Z",
+    "values": [["Date", "Amount"], ["2026-05-01", 100000]]
+  }'
+```
+
 ### 3. Chạy bằng Docker
 
 ```bash
@@ -116,8 +129,10 @@ docker build -t trietdang5599/mochi-finance-api:latest -f backend/Dockerfile .
 ### 3. Chạy thử local
 
 ```bash
-docker run --rm -p 8000:8000 trietdang5599/mochi-finance-api:tagname
+docker run --rm --env-file backend/.env -p 8000:8000 trietdang5599/mochi-finance-api:tagname
 ```
+
+Local Docker phải truyền `--env-file backend/.env` vì `.env` không được copy vào image. Nếu không truyền env file, `/auth/google/login` sẽ trả `500` với lỗi thiếu `GOOGLE_CLIENT_ID`.
 
 Mở API docs:
 
@@ -147,7 +162,7 @@ docker push trietdang5599/mochi-finance-api:latest
 
 ```bash
 docker pull trietdang5599/mochi-finance-api:tagname
-docker run --rm -p 8000:8000 trietdang5599/mochi-finance-api:tagname
+docker run --rm --env-file backend/.env -p 8000:8000 trietdang5599/mochi-finance-api:tagname
 ```
 
 ## Deploy Render bằng Docker Hub image
@@ -203,6 +218,7 @@ OAuth consent screen cần có các scope:
 ```text
 https://www.googleapis.com/auth/drive.readonly
 https://www.googleapis.com/auth/spreadsheets
+https://www.googleapis.com/auth/drive.file
 ```
 
 Google Cloud project cũng cần bật Google Drive API và Google Sheets API. Sau khi thêm scope mới, người dùng phải reconnect Google để nhận access token mới có quyền `spreadsheets`; token cũ trong FE/localStorage sẽ vẫn bị Google từ chối khi overwrite Sheet.

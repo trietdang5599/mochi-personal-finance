@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -69,3 +69,58 @@ class GoogleDriveFileResponse(BaseModel):
     mime_type: str
     download_path: str
     size: int | None = None
+
+
+class GoogleDriveFileMetadataResponse(BaseModel):
+    id: str
+    name: str
+    mime_type: str
+    size: int | None = None
+    is_google_sheet: bool
+    is_excel_file: bool
+
+
+class GoogleSheetMetadataResponse(BaseModel):
+    spreadsheet_id: str
+    title: str
+    sheets: list[dict[str, Any]]
+
+
+class GoogleSheetOverwriteRequest(BaseModel):
+    range: str = Field(default="A1", min_length=1)
+    values: list[list[Any]]
+    clear_range: str | None = Field(default=None, min_length=1)
+    value_input_option: str = Field(default="USER_ENTERED")
+
+
+class GoogleSheetOverwriteResponse(BaseModel):
+    spreadsheet_id: str
+    updated_range: str
+    updated_rows: int
+    updated_columns: int
+    updated_cells: int
+    cleared_range: str | None = None
+
+
+class GoogleSheetData(BaseModel):
+    name: str = Field(min_length=1)
+    values: list[list[Any]]
+
+
+class GoogleSheetBatchOverwriteRequest(BaseModel):
+    sheets: list[GoogleSheetData]
+    value_input_option: str = Field(default="RAW")
+
+
+class GoogleSheetBatchOverwriteResponse(BaseModel):
+    spreadsheet_id: str
+    added_sheets: list[str]
+    cleared_ranges: list[str]
+    total_updated_rows: int
+    total_updated_columns: int
+    total_updated_cells: int
+
+
+class GoogleDriveOverwriteResponse(BaseModel):
+    file_id: str
+    size: int

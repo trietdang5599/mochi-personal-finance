@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import os
 from pathlib import Path
 import secrets
-from urllib.parse import urlencode, urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 import requests
 from dotenv import load_dotenv
+
+
+logger = logging.getLogger(__name__)
 
 
 def is_production() -> bool:
@@ -29,6 +33,26 @@ if not is_production():
 
 class GoogleOAuthError(Exception):
     pass
+
+
+class GoogleAPIError(GoogleOAuthError):
+    def __init__(self, message: str, status_code: int = 400, stage: str | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.stage = stage
+
+    @property
+    def detail(self) -> str:
+        return f"{self.stage}: {self}" if self.stage else str(self)
+
+
+class GoogleOfficeFileError(GoogleAPIError):
+    def __init__(self) -> None:
+        super().__init__(
+            "This file is an Office Excel file, not a native Google Sheet. Use the Google Drive overwrite endpoint instead.",
+            status_code=409,
+            stage="google_sheets_metadata",
+        )
 
 
 @dataclass(frozen=True)
@@ -83,8 +107,27 @@ class GoogleOAuthService:
     userinfo_url = "https://www.googleapis.com/oauth2/v3/userinfo"
     revoke_url = "https://oauth2.googleapis.com/revoke"
     drive_files_url = "https://www.googleapis.com/drive/v3/files"
+    drive_upload_files_url = "https://www.googleapis.com/upload/drive/v3/files"
+    sheets_spreadsheets_url = "https://sheets.googleapis.com/v4/spreadsheets"
+    drive_scope = "https://www.googleapis.com/auth/drive"
     drive_readonly_scope = "https://www.googleapis.com/auth/drive.readonly"
+    drive_file_scope = "https://www.googleapis.com/auth/drive.file"
     spreadsheets_scope = "https://www.googleapis.com/auth/spreadsheets"
+    default_scopes = (
+        "openid",
+        "email",
+        "profile",
+        drive_scope,
+        drive_readonly_scope,
+        drive_file_scope,
+        spreadsheets_scope,
+    )
+    allowed_extra_scopes = (
+        drive_scope,
+        drive_file_scope,
+        drive_readonly_scope,
+        spreadsheets_scope,
+    )
     google_sheets_mime_type = "application/vnd.google-apps.spreadsheet"
     excel_mime_types = (
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -95,7 +138,12 @@ class GoogleOAuthService:
     def __init__(self, config: GoogleOAuthConfig | None = None) -> None:
         self.config = config or GoogleOAuthConfig.from_env()
 
-    def build_login_url(self, return_to: str | None = None) -> str:
+    def build_login_url(
+        self,
+        return_to: str | None = None,
+        requested_scope: str | None = None,
+        prompt: str | None = None,
+    ) -> str:
         self._require_client_id()
         state = secrets.token_urlsafe(24)
         if return_to:
@@ -105,9 +153,9 @@ class GoogleOAuthService:
             "client_id": self.config.client_id,
             "redirect_uri": self.config.redirect_uri,
             "response_type": "code",
-            "scope": f"openid email profile {self.drive_readonly_scope} {self.spreadsheets_scope}",
+            "scope": " ".join(self._oauth_scopes(requested_scope)),
             "access_type": "offline",
-            "prompt": "consent",
+            "prompt": prompt if prompt in {"none", "consent", "select_account"} else "consent",
             "state": state,
         }
         return f"{self.auth_url}?{urlencode(params)}"
@@ -255,7 +303,7 @@ class GoogleOAuthService:
         )
         payload = self._json_payload(response, "google_drive_file_invalid_response")
         if response.status_code != 200:
-            raise GoogleOAuthError(self._google_error_message(payload, "google_drive_file_failed"))
+            raise self._google_api_error("google_drive_file_metadata", response.status_code, payload, "google_drive_file_failed")
         return payload
 
     def download_excel_file(self, access_token: str, metadata: dict[str, object]) -> GoogleDriveFile:
@@ -302,6 +350,146 @@ class GoogleOAuthService:
             download_path=str(download_path),
             size=int(size) if isinstance(size, str) and size.isdigit() else None,
         )
+
+    def fetch_spreadsheet_metadata(self, access_token: str, spreadsheet_id: str) -> dict[str, object]:
+        drive_metadata = self.fetch_drive_file_metadata(access_token, spreadsheet_id)
+        if drive_metadata.get("mimeType") != self.google_sheets_mime_type:
+            raise GoogleOfficeFileError()
+
+        response = requests.get(
+            f"{self.sheets_spreadsheets_url}/{spreadsheet_id}",
+            headers=self._authorization_header(access_token),
+            params={"fields": "spreadsheetId,properties.title,sheets.properties"},
+            timeout=10,
+        )
+        payload = self._json_payload(response, "google_sheets_metadata_invalid_response")
+        if response.status_code != 200:
+            raise self._google_api_error("google_sheets_metadata", response.status_code, payload, "google_sheets_metadata_failed")
+        return payload
+
+    def clear_spreadsheet_values(self, access_token: str, spreadsheet_id: str, value_range: str) -> str:
+        encoded_range = quote(value_range, safe="!:")
+        response = requests.post(
+            f"{self.sheets_spreadsheets_url}/{spreadsheet_id}/values/{encoded_range}:clear",
+            headers=self._authorization_header(access_token),
+            json={},
+            timeout=10,
+        )
+        payload = self._json_payload(response, "google_sheets_clear_invalid_response")
+        if response.status_code != 200:
+            raise self._google_api_error("google_sheets_clear", response.status_code, payload, "google_sheets_clear_failed")
+        return str(payload.get("clearedRange") or value_range)
+
+    def overwrite_spreadsheet_values(
+        self,
+        access_token: str,
+        spreadsheet_id: str,
+        value_range: str,
+        values: list[list[object]],
+        value_input_option: str = "USER_ENTERED",
+        clear_range: str | None = None,
+    ) -> dict[str, object]:
+        cleared_range = None
+        if clear_range:
+            cleared_range = self.clear_spreadsheet_values(access_token, spreadsheet_id, clear_range)
+
+        encoded_range = quote(value_range, safe="!:")
+        response = requests.put(
+            f"{self.sheets_spreadsheets_url}/{spreadsheet_id}/values/{encoded_range}",
+            headers=self._authorization_header(access_token),
+            params={"valueInputOption": value_input_option if value_input_option in {"RAW", "USER_ENTERED"} else "USER_ENTERED"},
+            json={"values": values},
+            timeout=30,
+        )
+        payload = self._json_payload(response, "google_sheets_update_invalid_response")
+        if response.status_code != 200:
+            raise self._google_api_error("google_sheets_update", response.status_code, payload, "google_sheets_update_failed")
+        if cleared_range:
+            payload["clearedRange"] = cleared_range
+        return payload
+
+    def overwrite_spreadsheet_sheets(
+        self,
+        access_token: str,
+        spreadsheet_id: str,
+        sheets: list[dict[str, object]],
+        value_input_option: str = "RAW",
+    ) -> dict[str, object]:
+        metadata = self.fetch_spreadsheet_metadata(access_token, spreadsheet_id)
+        existing_titles = {
+            str(properties.get("title"))
+            for sheet in metadata.get("sheets", [])
+            if isinstance(sheet, dict)
+            for properties in [sheet.get("properties")]
+            if isinstance(properties, dict) and properties.get("title")
+        }
+        requested_titles = [str(sheet.get("name")) for sheet in sheets if sheet.get("name")]
+        missing_titles = [title for title in requested_titles if title not in existing_titles]
+
+        if missing_titles:
+            response = requests.post(
+                f"{self.sheets_spreadsheets_url}/{spreadsheet_id}:batchUpdate",
+                headers=self._authorization_header(access_token),
+                json={"requests": [{"addSheet": {"properties": {"title": title}}} for title in missing_titles]},
+                timeout=30,
+            )
+            payload = self._json_payload(response, "google_sheets_add_invalid_response")
+            if response.status_code != 200:
+                raise self._google_api_error("google_sheets_add", response.status_code, payload, "google_sheets_add_failed")
+
+        cleared_ranges: list[str] = []
+        if requested_titles:
+            response = requests.post(
+                f"{self.sheets_spreadsheets_url}/{spreadsheet_id}/values:batchClear",
+                headers=self._authorization_header(access_token),
+                json={"ranges": [self._whole_sheet_range(title) for title in requested_titles]},
+                timeout=30,
+            )
+            payload = self._json_payload(response, "google_sheets_batch_clear_invalid_response")
+            if response.status_code != 200:
+                raise self._google_api_error("google_sheets_batch_clear", response.status_code, payload, "google_sheets_batch_clear_failed")
+            cleared = payload.get("clearedRanges")
+            cleared_ranges = [str(item) for item in cleared] if isinstance(cleared, list) else []
+
+        response = requests.post(
+            f"{self.sheets_spreadsheets_url}/{spreadsheet_id}/values:batchUpdate",
+            headers=self._authorization_header(access_token),
+            json={
+                "valueInputOption": value_input_option if value_input_option in {"RAW", "USER_ENTERED"} else "RAW",
+                "data": [
+                    {
+                        "range": f"{self._quote_sheet_name(str(sheet.get('name')))}!A1",
+                        "values": sheet.get("values") if isinstance(sheet.get("values"), list) else [],
+                    }
+                    for sheet in sheets
+                    if sheet.get("name")
+                ],
+            },
+            timeout=30,
+        )
+        payload = self._json_payload(response, "google_sheets_batch_update_invalid_response")
+        if response.status_code != 200:
+            raise self._google_api_error("google_sheets_batch_update", response.status_code, payload, "google_sheets_batch_update_failed")
+
+        payload["addedSheets"] = missing_titles
+        payload["clearedRanges"] = cleared_ranges
+        return payload
+
+    def overwrite_drive_file(self, access_token: str, file_id: str, content: bytes, content_type: str) -> dict[str, object]:
+        response = requests.patch(
+            f"{self.drive_upload_files_url}/{file_id}",
+            headers={
+                **self._authorization_header(access_token),
+                "Content-Type": content_type or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            },
+            params={"uploadType": "media", "supportsAllDrives": "true"},
+            data=content,
+            timeout=30,
+        )
+        payload = self._safe_json_payload(response)
+        if response.status_code not in (200, 201):
+            raise self._google_api_error("google_drive_overwrite", response.status_code, payload, "google_drive_overwrite_failed")
+        return payload
 
     def _frontend_error_url(self, message: str) -> str:
         return f"{self.config.frontend_url}?{urlencode({'auth': 'google_error', 'message': message})}"
@@ -354,6 +542,17 @@ class GoogleOAuthService:
         error_description = payload.get("error_description")
         return error_description if isinstance(error_description, str) and error_description else fallback
 
+    def _google_api_error(
+        self,
+        stage: str,
+        status_code: int,
+        payload: dict[str, object],
+        fallback: str,
+    ) -> GoogleAPIError:
+        message = self._google_error_message(payload, fallback)
+        logger.warning("Google API error stage=%s status=%s message=%s payload=%s", stage, status_code, message, payload)
+        return GoogleAPIError(message, status_code=status_code, stage=stage)
+
     def _safe_filename(self, value: str) -> str:
         filename = Path(value).name.strip()
         safe = "".join(character if character.isalnum() or character in "._- " else "_" for character in filename)
@@ -361,3 +560,18 @@ class GoogleOAuthService:
 
     def _escape_drive_query_value(self, value: str) -> str:
         return value.replace("\\", "\\\\").replace("'", "\\'")
+
+    def _quote_sheet_name(self, value: str) -> str:
+        return f"'{value.replace(chr(39), chr(39) + chr(39))}'"
+
+    def _whole_sheet_range(self, value: str) -> str:
+        return f"{self._quote_sheet_name(value)}!A:ZZZ"
+
+    def _oauth_scopes(self, requested_scope: str | None) -> list[str]:
+        scopes = list(self.default_scopes)
+        if requested_scope:
+            allowed = set(self.allowed_extra_scopes)
+            for scope in requested_scope.split():
+                if scope in allowed and scope not in scopes:
+                    scopes.append(scope)
+        return scopes
